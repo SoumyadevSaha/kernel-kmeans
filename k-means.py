@@ -18,91 +18,70 @@ class KMeans:
         self._data_k2 = data_k2
         self._dp = [[-1.0] * (datasize + 1) for _ in range(datasize + 1)]
  
-        self.centroids = None
+        self.clusters = None
     
-    def initialize_centroids(self, docs): # docs contains list of documents (the doc id)
-        # Randomly choose k data points as centroids
-        ids = [id for id in docs]
-        np.random.seed(0)
-        np.random.shuffle(ids)
-        # np.random.shuffle(docs)
-        self.centroids = ids[:self.k]
-        print("INITIAL CENTROIDS :", self.centroids)
+    def initialize_clusters(self, docs): # docs contains list of documents (the doc id)
+        # divide the documents int k clusters
+        # i.e, docs = [1, 2, 3, 4, 5, 6, 7] then self.clusters = [[1, 2, 3], [3, 4, 5], [6, 7]] if self.k = 3
+        self.clusters = []
+        for i in range(self.k):
+            self.clusters.append([])
+        for i in range(len(docs)):
+            self.clusters[i % self.k].append(docs[i])
+        # print("INITIAL CLUSTERS :", self.clusters)
+        print("INITIAL CLUSTERS CREATED")
     
     def compute_distance(self, id1, id2):
         # Compute the distance between two documents
-        EPSILON = 1e-12  # Adjust the epsilon value as needed
+        EPSILON = 1e-13  # Adjust the epsilon value as needed
         if abs(self._dp[id1][id2] - (-1.0)) < EPSILON:
             doc1_k1 = self._data_k1[id1]['text']
             doc2_k1 = self._data_k1[id2]['text']
             doc1_k2 = self._data_k2[id1]['text']
             doc2_k2 = self._data_k2[id2]['text']
-            self._dp[id1][id2] = self.alpha * k1(doc1_k1, doc2_k1) + (1 - self.alpha) * k2_set(doc1_k2, doc2_k2)
+            # self._dp[id1][id2] = self.alpha * k1(doc1_k1, doc2_k1) + (1 - self.alpha) * k2_set(doc1_k2, doc2_k2)
+            # self._dp[id2][id1] = k1(doc1_k1, doc2_k1)
+            self._dp[id1][id2] = k2_set(doc1_k2, doc2_k2)
             # self._dp[id1][id2] = self.alpha * k1(doc1_k1, doc2_k1) + (1 - self.alpha) * k2(doc1_k2, doc2_k2)
             self._dp[id2][id1] = self._dp[id1][id2]
         return self._dp[id1][id2]
     
-    def find_closest_centroids(self, docs):
-        # Compute the distance between each document and the centroids and assign the document to the closest centroid
-        closest_centroids = []
-        for doc_id in docs:
-            distances = []
-            for centroid in self.centroids:
-                distances.append(self.compute_distance(doc_id, centroid))
-            closest_centroids.append(self.centroids[np.argmax(distances)]) # np.argmax returns the index of the maximum value in the array
-        return closest_centroids
 
     def fit(self, docs):
         # Run the KMeans algorithm
         self.patience = 3
-        self.initialize_centroids(docs)
+        self.initialize_clusters(docs)
         for i in range(self.max_iter):
-            closest_centroids = self.find_closest_centroids(docs)
-
-            new_centroids = []
+            new_clusters = []
             for j in range(self.k):
-                # for each cluster, calculate the center of gravity of the documents in the cluster
-                # take the distance of each point from all the other points in the cluster and the add the distance, one with the minimum distance is the center of gravity
-                curr_centroid = self.centroids[j] # the current centroid id a document id
-                new_centroid = None
-                max_similarity = 0.0
-                cluster_points = []
-                for idx in range(len(docs)):
-                    if closest_centroids[idx] == curr_centroid:
-                        cluster_points.append(docs[idx]) # appedn the doc id
-                print("Cluster Points for Centroid", curr_centroid, "extracted with size :", len(cluster_points))
-                for doc_id1 in cluster_points:
+                new_clusters.append([])
+            for doc_id in docs:
+                distances = []
+                for cluster in self.clusters:
                     sum_similarity = 0.0
-                    for doc_id2 in cluster_points:
-                        if doc_id1 == doc_id2:
-                            continue
-                        sum_similarity += self.compute_distance(doc_id1, doc_id2)
-                    curr_similarity = sum_similarity / ((len(cluster_points) - 1) if len(cluster_points) > 1 else 1)
-                    # curr_similarity = sum_similarity / (len(cluster_points) if len(cluster_points) > 0 else 1)
-                    if curr_similarity >= max_similarity:
-                        max_similarity = curr_similarity
-                        new_centroid = doc_id1
-                print("New Centroid for Cluster", curr_centroid, "is", new_centroid, "with similarity", max_similarity)
-                new_centroids.append(new_centroid)
-            print("[ ITERATION", i, "] : NEW CENTROIDS :", new_centroids)
-            if np.all(self.centroids == new_centroids):
+                    for id in cluster:
+                        sum_similarity += self.compute_distance(doc_id, id)
+                    sum_similarity /= len(cluster)
+                    distances.append(sum_similarity)
+                new_clusters[np.argmax(distances)].append(doc_id)
+            print("[ ITERATION", i, "] : Complete")
+            if np.all(self.clusters == new_clusters):
                 self.patience -= 1
                 if self.patience == 0:
                     break
             else:
                 self.patience = 3
-            self.centroids = new_centroids
-        print("FINAL CENTROIDS :", self.centroids)
-        return self.centroids
+            self.clusters = new_clusters
+        print("FINAL CLUSTERS FETCHED")
+        print("Training Complete !")
+                
+        return self.clusters
     
     def get_clusters(self, docs):
-        closest_centroids = self.find_closest_centroids(docs) # closest_centroids contains the id of the closest centroid for each document
+        clusters = self.clusters
         centroid_doc_map = {}
-        for i in range(len(closest_centroids)):
-            if closest_centroids[i] not in centroid_doc_map.keys():
-                centroid_doc_map[closest_centroids[i]] = []
-            centroid_doc_map[closest_centroids[i]].append(docs[i]) # for each centrid, append the doc ids of the documents that are closest to it
-
+        for i in range(len(clusters)):
+            centroid_doc_map[i] = clusters[i]
         return centroid_doc_map
     
     def predict(self, docs):
@@ -120,7 +99,7 @@ class KMeans:
         print("Recall: ", get_recall(decisions))
         print("F1 Score: ", get_f1_score(decisions))
 
-alpha = 0.4
+alpha = 0.0
 
 from extract_data import get_original_data
 # Test the KMeans class
